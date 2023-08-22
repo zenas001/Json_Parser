@@ -1,6 +1,7 @@
 package com.godwin.jsonparser.ui.forms;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.github.weisj.jsvg.S;
 import com.godwin.jsonparser.common.Logger;
 import com.godwin.jsonparser.ui.IParserWidget;
 import com.godwin.jsonparser.ui.TreeNodeCreator;
@@ -56,6 +57,7 @@ public class ParserBodyWidget {
     private JPanel previewTypeContainer;
     private JPanel prettyContainer;
     private JPanel rawContainer;
+    private JPanel minimalContainer;   //TODO add Minimal
     private JTree outputTree;
 
     private JScrollPane treeContainer;
@@ -67,6 +69,8 @@ public class ParserBodyWidget {
 
     private final Editor prettyEditor;
     private final Editor rawEditor;
+    //TODO add Minimal
+    private final Editor minimalEditor;
 
     private static final IElementType TextElementType = new IElementType("TEXT", Language.ANY);
 
@@ -74,6 +78,12 @@ public class ParserBodyWidget {
 
     private final ActionListener previewTypeListener = e -> mPreviewTypeCardLayout.show(previewTypeContainer, e.getActionCommand());
     private final IParserWidget parserWidget;
+
+    private static final String PRETTY = "Pretty";
+    private static final String MINIMAL = "Minimal";
+
+    private static final String RAW = "Raw";
+    private static final String TREE = "Tree";
 
     public ParserBodyWidget(Project mProject, IParserWidget parserWidget) {
 
@@ -86,6 +96,10 @@ public class ParserBodyWidget {
         prettyContainer.add(prettyEditor.getComponent(), BorderLayout.CENTER);
         rawEditor = createEditor();
         rawContainer.add(rawEditor.getComponent(), BorderLayout.CENTER);
+        //TODO add Minimal
+        minimalEditor = createEditor();
+        //TODO add Minimal
+        minimalContainer.add(minimalEditor.getComponent(), BorderLayout.CENTER);
 
         changeIcon();
         setEmptyTree();
@@ -97,20 +111,25 @@ public class ParserBodyWidget {
         simpleToolWindowPanel1 = new SimpleToolWindowPanel(true, true);
         buttonGroup = new ButtonGroup();
         ActionGroup group = new DefaultActionGroup(
-                new JBRadioAction("Pretty", "Pretty", buttonGroup, previewTypeListener, true),
-                new JBRadioAction("Raw", "Raw", buttonGroup, previewTypeListener),
-                new JBRadioAction("Tree", "Tree", buttonGroup, previewTypeListener),
+                new JBRadioAction(PRETTY, PRETTY, buttonGroup, previewTypeListener, true),
+                //TODO add Minimal
+                new JBRadioAction(MINIMAL, MINIMAL, buttonGroup, previewTypeListener),
+                new JBRadioAction(RAW, RAW, buttonGroup, previewTypeListener),
+                new JBRadioAction(TREE, TREE, buttonGroup, previewTypeListener),
                 new CopyToClipBoardAction("Copy to Clipboard", "Click to copy selected text to clipboard", AllIcons.Actions.Copy),
                 new AnAction("Use Soft Wraps", "Toggle using soft wraps in current editor", AllIcons.Actions.ToggleSoftWrap) {
                     @Override
                     public void actionPerformed(AnActionEvent anActionEvent) {
                         try {
                             String actionCommand = buttonGroup.getSelection().getActionCommand();
-                            if ("Pretty".equalsIgnoreCase(actionCommand)) {
+                            if (PRETTY.equalsIgnoreCase(actionCommand)) {
                                 EditorSettings settings = prettyEditor.getSettings();
                                 settings.setUseSoftWraps(!settings.isUseSoftWraps());
-                            } else if ("Raw".equalsIgnoreCase(actionCommand)) {
+                            } else if (RAW.equalsIgnoreCase(actionCommand)) {
                                 EditorSettings settings = rawEditor.getSettings();
+                                settings.setUseSoftWraps(!settings.isUseSoftWraps());
+                            } else if (MINIMAL.equalsIgnoreCase(actionCommand)) {
+                                EditorSettings settings = minimalEditor.getSettings();
                                 settings.setUseSoftWraps(!settings.isUseSoftWraps());
                             }
                         } catch (Exception e) {
@@ -202,43 +221,63 @@ public class ParserBodyWidget {
                 prettyJsonString = JsonUtils.formatJson(text);
             }
 
-            writeToEditor(prettyJsonString);
+            writeToEditor(prettyJsonString, prettyEditor);
 
         } catch (Exception e) {
-//            e.printStackTrace();
-            if (e instanceof JsonSyntaxException) {
-                String message = e.getMessage();
-                if (TextUtils.isEmpty(message) && e.getCause() != null && !TextUtils.isEmpty(e.getCause().getMessage())) {
-                    message = e.getCause().getMessage();
-                }
-                String finalMessage = message;
-                writeToEditor(text + "\n\n\n" + finalMessage);
-            } else if (e instanceof JsonProcessingException) {
-
-                writeToEditor(text);
-
-                JsonProcessingException exception = (JsonProcessingException) e;
-                String originalMessage = exception.getOriginalMessage();
-                long charOffset = exception.getLocation().getCharOffset();
-
-
-//
-                EditorHintsNotifier.notifyError(Objects.requireNonNull(prettyEditor), originalMessage, charOffset);
-
-            }
+            doErr(text, e, prettyEditor);
         }
     }
 
-    private void writeToEditor(String prettyJsonString) {
+    //TODO add Minimal
+    public void showMinimal(String minimalJson) {
+        try {
+            String minimalJsonString;
+            if (TextUtils.isEmpty(minimalJson)) {
+                minimalJsonString = "";
+            } else {
+                minimalJsonString = JsonUtils.minifyJson(minimalJson);
+            }
+            writeToEditor(minimalJsonString, minimalEditor);
+        } catch (Exception e) {
+            doErr(minimalJson, e, minimalEditor);
+        }
+    }
+
+    private void writeToEditor(String prettyJsonString, Editor editor) {
         WriteCommandAction.runWriteCommandAction(mProject, () -> {
-            Document document = prettyEditor.getDocument();
+            Document document = editor.getDocument();
             document.setReadOnly(false);
             document.setText(prettyJsonString);
             document.setReadOnly(true);
         });
         LanguageFileType fileType = getFileType();
-        ((EditorEx) prettyEditor).setHighlighter(createHighlighter(fileType));
+        ((EditorEx) editor).setHighlighter(createHighlighter(fileType));
     }
+
+    private void doErr(String text, Exception e, Editor editor) {
+        //            e.printStackTrace();
+        if (e instanceof JsonSyntaxException) {
+            String message = e.getMessage();
+            if (TextUtils.isEmpty(message) && e.getCause() != null && !TextUtils.isEmpty(e.getCause().getMessage())) {
+                message = e.getCause().getMessage();
+            }
+            String finalMessage = message;
+            writeToEditor(text + "\n\n\n" + finalMessage, editor);
+        } else if (e instanceof JsonProcessingException) {
+
+            writeToEditor(text, editor);
+
+            JsonProcessingException exception = (JsonProcessingException) e;
+            String originalMessage = exception.getOriginalMessage();
+            long charOffset = exception.getLocation().getCharOffset();
+
+
+//
+            EditorHintsNotifier.notifyError(Objects.requireNonNull(editor), originalMessage, charOffset);
+
+        }
+    }
+
 
     public void showRaw(String text) {
         if (null == text)
@@ -250,6 +289,7 @@ public class ParserBodyWidget {
             Logger.e("json Error catch");
         }
     }
+
 
     public void showTree(String jsonString) {
         if (TextUtils.isEmpty(jsonString)) {

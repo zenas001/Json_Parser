@@ -105,6 +105,8 @@ public class ParserWidget implements Publisher {
 
     private void showBody(String jsonString) {
         mBodyWidget.showPretty(jsonString);
+        //TODO add Minimal
+        mBodyWidget.showMinimal(jsonString);
         mBodyWidget.showRaw(jsonString);
         mBodyWidget.showTree(jsonString);
     }
